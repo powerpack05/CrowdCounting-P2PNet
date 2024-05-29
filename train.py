@@ -97,7 +97,7 @@ def main(args):
     
     run_log_name = os.path.join(args.output_dir, 'run_log.txt')
     with open(run_log_name, "w") as log_file:
-        log_file.write('Eval Log s%\n' % time.strftime("%c"))
+        log_file.write('Eval Log %s\n' % time.strftime("%c"))
 
 
     if args.frozen_weights is not None:
