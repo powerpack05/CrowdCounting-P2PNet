@@ -15,6 +15,10 @@ from tensorboardX import SummaryWriter
 import warnings
 warnings.filterwarnings('ignore')
 
+
+def parse_gpu_ids(gpu_id_str):
+    return [int(gpu_id) for gpu_id in gpu_id_str.split(',')]
+
 def get_args_parser():
     parser = argparse.ArgumentParser('Set parameters for training P2PNet', add_help=False)
     parser.add_argument('--lr', default=1e-4, type=float)
@@ -71,34 +75,65 @@ def get_args_parser():
     parser.add_argument('--num_workers', default=8, type=int)
     parser.add_argument('--eval_freq', default=5, type=int,
                         help='frequency of evaluation, default setting is evaluating in every 5 epoch')
-    parser.add_argument('--gpu_id', default=0, type=int, help='the gpu used for training')
+    # parser.add_argument('--gpu_id', default=0, type=int, help='the gpu used for training')
+    parser.add_argument('--gpu_id', type=parse_gpu_ids, help='Comma separated list of GPU IDs to use.')
 
     return parser
 
 def main(args):
-    os.environ["CUDA_VISIBLE_DEVICES"] = '{}'.format(args.gpu_id)
+    
+    gpu_ids = args.gpu_id
+    print(f'Using GPUs: {gpu_ids}')
+    
+    
+    # Set the environment variable for TensorFlow
+    os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, gpu_ids))
+
+
+    
+    # os.environ["CUDA_VISIBLE_DEVICES"] = '{}'.format(args.gpu_id)
     # create the logging file
+    # code for the output logs 
+    
     run_log_name = os.path.join(args.output_dir, 'run_log.txt')
     with open(run_log_name, "w") as log_file:
-        log_file.write('Eval Log %s\n' % time.strftime("%c"))
+        log_file.write('Eval Log s%\n' % time.strftime("%c"))
+
 
     if args.frozen_weights is not None:
         assert args.masks, "Frozen training is meant for segmentation only"
+        
     # backup the arguments
     print(args)
+    
     with open(run_log_name, "a") as log_file:
         log_file.write("{}".format(args))
-    device = torch.device('cuda')
+        
+    if torch.cuda.is_available():
+        print(f'Using GPUs: {gpu_ids}')  
+        
+    # device is set to the first GPU
+    device = torch.device(f'cuda:{gpu_ids[0]}')
+        
+    # device = torch.device('cuda')
     # fix the seed for reproducibility
+    
     seed = args.seed + utils.get_rank()
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+    
     # get the P2PNet model
     model, criterion = build_model(args, training=True)
+    
+    if len(gpu_ids) > 1:
+        model = torch.nn.DataParallel(model, device_ids=gpu_ids)
+    # Move the model to the first GPU
+    model.to(f'cuda:{gpu_ids[0]}')   
+    
     # move to GPU
-    model.to(device)
-    criterion.to(device)
+    # model.to(device)
+    criterion.to(f'cuda:{gpu_ids[0]}')
 
     model_without_ddp = model
 
